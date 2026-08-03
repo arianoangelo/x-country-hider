@@ -1,0 +1,12 @@
+{
+  "name": "x-country-hider",
+  "version": "0.8.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "A Chrome extension that filters X posts by the account location shown by X.",
+  "scripts": {
+    "check": "node --check shared.js && node --check background-logic.js && node --check background.js && node --check content.js && node --check popup.js && node -e \"JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'))\"",
+    "test": "node --test",
+    "verify": "npm run check && npm test"
+  }
+}

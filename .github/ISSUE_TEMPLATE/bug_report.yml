@@ -1,0 +1,45 @@
+name: Bug report
+description: Report incorrect filtering, a broken popup, or another reproducible problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve X Country Hider. Never include cookies, session tokens, or private account information.
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chrome version
+      placeholder: "For example: 150.0.7871.129"
+    validations:
+      required: true
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      placeholder: "For example: 0.8.0"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the page type and whether the popup showed a degraded status.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true

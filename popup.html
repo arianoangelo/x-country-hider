@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>X Country Hider</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <h1>X Country Hider</h1>
+          <p>Shape your timeline by account location</p>
+        </div>
+        <label class="switch" aria-label="Enable X Country Hider">
+          <input type="checkbox" id="enabled" checked />
+          <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        </label>
+      </header>
+
+      <section class="status-card" id="statusCard" aria-live="polite">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <div>
+          <strong id="statusTitle">Protection is on</strong>
+          <span id="statusDetail">Posts matching your list will be hidden.</span>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Extension activity">
+        <article class="stat-card">
+          <span class="stat-icon stat-icon--hidden" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" /><path d="M9.9 4.2A10.5 10.5 0 0 1 12 4c7 0 10 8 10 8a17.7 17.7 0 0 1-2.1 3.2" /><path d="M6.6 6.6C3.5 8.5 2 12 2 12s3 8 10 8a9.8 9.8 0 0 0 5.4-1.6" />
+            </svg>
+          </span>
+          <span class="stat-value" id="hiddenCount">0</span>
+          <span class="stat-label">Posts hidden</span>
+        </article>
+      </section>
+
+      <section class="countries-section" aria-labelledby="countriesTitle">
+        <div class="section-heading">
+          <div>
+            <h2 id="countriesTitle">Hidden countries</h2>
+            <p>Choose a country or region shown by X.</p>
+          </div>
+          <span class="count-badge" id="countryCount" aria-label="0 hidden countries">0</span>
+        </div>
+
+        <form class="country-form" id="countryForm">
+          <label class="sr-only" for="newCountry">Country or region</label>
+          <span class="input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z" />
+            </svg>
+          </span>
+          <select id="newCountry" required>
+            <option value="">Select a country or region</option>
+          </select>
+          <span class="select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m7 10 5 5 5-5" />
+            </svg>
+          </span>
+          <button type="submit" id="add" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add
+          </button>
+        </form>
+        <p class="form-message" id="formMessage" aria-live="polite"></p>
+
+        <div class="empty-state" id="emptyState">
+          <span class="empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s7-4.3 7-10V5.5L12 3 5 5.5V12c0 5.7 7 10 7 10Z" /><path d="M9 12h6" />
+            </svg>
+          </span>
+          <strong>Your list is empty</strong>
+          <span>Add a country to begin filtering posts.</span>
+        </div>
+        <ul class="country-list" id="list" aria-label="Countries hidden from the timeline"></ul>
+      </section>
+
+      <aside class="cache-note">
+        <span class="cache-note__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="14" height="10" x="5" y="11" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+        </span>
+        <div>
+          <strong>Stored locally</strong>
+          <p id="cacheDetail" aria-live="polite">Author locations are saved locally to avoid repeat requests to X.</p>
+        </div>
+        <button class="cache-note__clear" type="button" id="clearCache" disabled>Clear cache</button>
+      </aside>
+
+      <details class="about-card">
+        <summary>
+          <span class="about-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+            </svg>
+          </span>
+          <span class="about-card__title">About</span>
+          <span class="about-card__byline">By Ariano Ângelo</span>
+          <svg class="about-card__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </summary>
+        <div class="about-card__content">
+          X Country Hider uses your current X session only to request About this Account data directly from X. Session tokens are never stored; settings and cached locations stay in this browser.
+        </div>
+      </details>
+    </main>
+
+    <script src="shared.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
