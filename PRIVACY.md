@@ -1,6 +1,6 @@
 # Privacy policy
 
-Last updated: August 3, 2026
+Last updated: August 4, 2026
 
 X Country Hider processes only the information required to filter X posts by the country or region shown in X's About this Account data.
 
@@ -24,7 +24,7 @@ The extension has no developer-operated backend, analytics, telemetry, advertisi
 
 ## Local storage and retention
 
-The following data is stored in `chrome.storage.local` on the user's device:
+The following data is stored in the browser's extension-local storage on the user's device:
 
 - Settings, until changed or the extension is removed.
 - Resolved author locations, for up to 30 days.
@@ -32,7 +32,7 @@ The following data is stored in `chrome.storage.local` on the user's device:
 - A maximum of 5,000 cached author entries; older entries are removed first.
 - Request pacing, lookup-health state, and the hidden-post count, until the extension is removed.
 
-Chrome clears this extension storage when the extension is uninstalled. The popup's **Clear cache** button removes all cached author locations without changing settings or the hidden-post count.
+Chrome and Firefox clear this extension storage when the extension is uninstalled. The popup's **Clear cache** button removes all cached author locations without changing settings or the hidden-post count.
 
 ## Sharing and human access
 

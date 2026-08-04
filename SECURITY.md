@@ -10,7 +10,7 @@ Use GitHub's **Report a vulnerability** option in the repository's Security tab 
 
 Include:
 
-- The extension and Chrome versions.
+- The extension and browser versions.
 - A clear description of the impact.
 - Minimal reproduction steps.
 - Relevant source locations or sanitized console output.

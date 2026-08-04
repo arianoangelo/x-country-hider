@@ -15,8 +15,9 @@ Thanks for considering a contribution to X Country Hider.
 2. Add or update tests for pure logic.
 3. Run `npm run verify`.
 4. Load the repository with Chrome's **Load unpacked** option.
-5. Manually test the popup and filtering behavior in light and dark modes.
-6. Update `CHANGELOG.md` for user-visible behavior.
+5. Load `manifest.json` with Firefox's **Load Temporary Add-on** option.
+6. Manually test the popup and filtering behavior in light and dark modes in both browsers.
+7. Update `CHANGELOG.md` for user-visible behavior.
 
 Changes to the private X query, session handling, permissions, retention, or privacy policy require especially careful review.
 

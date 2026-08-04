@@ -2,6 +2,19 @@
 
 All notable changes to X Country Hider are documented here.
 
+## 0.9.0 — 2026-08-04
+
+### Added
+
+- Firefox Desktop 140+ support from the same Manifest V3 package used by Chrome.
+- Firefox signing metadata and built-in data-transmission consent declarations.
+- Automated smoke coverage for both Chrome service-worker and Firefox event-page startup.
+
+### Changed
+
+- Extension API calls now select Firefox's `browser` namespace or Chrome's `chrome` namespace at runtime.
+- Installation, privacy, security, and contribution documentation now covers both browsers.
+
 ## 0.8.0 — 2026-08-03
 
 ### Added

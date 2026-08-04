@@ -1,4 +1,5 @@
 const { normalizeCountry, normalizeSettings } = XHideShared;
+const extensionApi = globalThis.browser ?? globalThis.chrome;
 const SETTINGS_KEY = 'xhide_settings';
 
 const enabledEl = document.getElementById('enabled');
@@ -62,13 +63,13 @@ const ISO_REGION_CODES = [
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
 async function getSettings() {
-  const stored = await chrome.storage.local.get([SETTINGS_KEY]);
+  const stored = await extensionApi.storage.local.get([SETTINGS_KEY]);
   return normalizeSettings(stored[SETTINGS_KEY]);
 }
 
 function updateSettings(update) {
   const operation = settingsMutation.catch(() => {}).then(async () => {
-    const response = await chrome.runtime.sendMessage({
+    const response = await extensionApi.runtime.sendMessage({
       type: 'XHIDE_UPDATE_SETTINGS',
       ...update,
     });
@@ -211,7 +212,7 @@ async function render() {
   const requestId = ++renderSequence;
   const [settings, stats] = await Promise.all([
     getSettings().catch(() => normalizeSettings()),
-    chrome.runtime.sendMessage({ type: 'XHIDE_GET_STATS' }).catch(() => ({
+    extensionApi.runtime.sendMessage({ type: 'XHIDE_GET_STATS' }).catch(() => ({
       hiddenCount: 0,
       cacheSize: 0,
       lookupHealth: { status: 'service_error', error: 'extension_unavailable' },
@@ -278,7 +279,7 @@ clearCacheEl.addEventListener('click', async () => {
   clearCacheEl.disabled = true;
   clearCacheEl.textContent = 'Clearing…';
   try {
-    await chrome.runtime.sendMessage({ type: 'XHIDE_CLEAR_CACHE' });
+    await extensionApi.runtime.sendMessage({ type: 'XHIDE_CLEAR_CACHE' });
     await render();
   } catch (_) {
     cacheDetailEl.textContent = 'Could not clear the cache. Please try again.';

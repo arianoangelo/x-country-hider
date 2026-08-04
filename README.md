@@ -4,7 +4,7 @@
   <img src="icons/icon-128.png" width="96" height="96" alt="X Country Hider shield icon">
 </p>
 
-X Country Hider is a small Chrome extension that hides posts on [x.com](https://x.com) according to the country or region shown in X's **About this Account** data.
+X Country Hider is a small Chrome and Firefox extension that hides posts on [x.com](https://x.com) according to the country or region shown in X's **About this Account** data.
 
 It runs entirely in the browser, has no analytics or developer-operated server, and only contacts X directly when it needs an account location.
 
@@ -20,7 +20,7 @@ It runs entirely in the browser, has no analytics or developer-operated server, 
 - Clear all cached author locations from the popup at any time.
 - Match common country aliases such as Turkey/Türkiye and Czech Republic/Czechia.
 
-## Install from source
+## Install from source in Chrome
 
 1. Download or clone this repository.
 2. Open `chrome://extensions` in Chrome.
@@ -28,11 +28,21 @@ It runs entirely in the browser, has no analytics or developer-operated server, 
 4. Choose **Load unpacked** and select this repository's root folder.
 5. Sign in to X, open the extension popup, and add at least one country or region.
 
-The extension currently targets Chrome and other Chromium browsers that support Manifest V3 and Promise-based extension APIs.
+The shared Manifest V3 package targets Chrome 121 or newer and Firefox Desktop 140 or newer.
+
+## Install from source in Firefox
+
+1. Download or clone this repository.
+2. Open `about:debugging#/runtime/this-firefox` in Firefox 140 or newer.
+3. Choose **Load Temporary Add-on**.
+4. Select this repository's `manifest.json` file.
+5. Sign in to X, open the extension popup, and add at least one country or region.
+
+Temporary add-ons are removed when Firefox closes. A normal Firefox installation requires an XPI signed by Mozilla.
 
 ## How it works
 
-The content script observes rendered X posts. When a post is hovered or crosses the middle of the viewport, the background service worker checks the local cache and, if necessary, calls X's own `AboutAccountQuery` endpoint using the active X session.
+The content script observes rendered X posts. When a post is hovered or crosses the middle of the viewport, the browser's extension background process checks the local cache and, if necessary, calls X's own `AboutAccountQuery` endpoint using the active X session.
 
 Requests are deliberately serialized and adapt to X's rate-limit headers. Existing cached matches continue to work during a cooldown or temporary X outage.
 
@@ -50,6 +60,8 @@ Cache policy:
 | --- | --- |
 | `storage` | Saves settings, cached author locations, the hidden-post count, and request pacing state locally. |
 | `https://x.com/*` | Reads rendered posts, obtains the transient X CSRF cookie, and makes direct requests to X's account-data endpoint. |
+
+The Firefox package also declares the website-content and authentication-information data categories because the account handle and current X session are sent directly back to X for the requested lookup. This does not grant access to any additional website.
 
 The extension does not request browsing-history, tabs, cookies, or access to any site other than `x.com`.
 
@@ -69,7 +81,7 @@ npm run verify
 
 This checks JavaScript syntax, parses the manifest, and runs the unit tests for cache expiry, API-response validation, settings normalization, and country aliases.
 
-When changing behavior, update the version in both `manifest.json` and `package.json`, add an entry to [CHANGELOG.md](CHANGELOG.md), and manually test against a signed-in X account.
+When changing behavior, update the version in both `manifest.json` and `package.json`, add an entry to [CHANGELOG.md](CHANGELOG.md), and manually test against a signed-in X account in both Chrome and Firefox.
 
 ## Security
 

@@ -1,7 +1,13 @@
-importScripts('shared.js', 'background-logic.js');
+// Chrome runs this file as a service worker and needs to import its helpers.
+// Firefox loads the same helpers first through background.scripts, where
+// importScripts is not available because the background context is a page.
+if (typeof importScripts === 'function') {
+  importScripts('shared.js', 'background-logic.js');
+}
 
 // Owns all X API access for the extension. Keeping the queue and cache here
 // prevents separate x.com tabs from repeating the same account lookup.
+const extensionApi = globalThis.browser ?? globalThis.chrome;
 const { normalizeCountry, normalizeSettings } = XHideShared;
 const {
   MAX_CACHE_ENTRIES,
@@ -109,7 +115,7 @@ function getFreshCacheEntry(handleKey) {
   if (!entry) return null;
   if (isCacheEntryFresh(entry)) return entry;
   cache.delete(handleKey);
-  void chrome.storage.local.remove(cacheStorageKey(handleKey)).catch(() => {});
+  void extensionApi.storage.local.remove(cacheStorageKey(handleKey)).catch(() => {});
   return null;
 }
 
@@ -121,7 +127,7 @@ function pruneExpiredCacheEntries() {
     expiredStorageKeys.push(cacheStorageKey(handleKey));
   }
   if (expiredStorageKeys.length) {
-    void chrome.storage.local.remove(expiredStorageKeys).catch(() => {});
+    void extensionApi.storage.local.remove(expiredStorageKeys).catch(() => {});
   }
 }
 
@@ -143,18 +149,18 @@ function evictOldestCacheEntries() {
 async function storeCacheEntry(handleKey, entry) {
   cache.set(handleKey, entry);
   const evictedStorageKeys = evictOldestCacheEntries();
-  await chrome.storage.local
+  await extensionApi.storage.local
     .set({ [cacheStorageKey(handleKey)]: entry })
     .catch(() => {});
   if (evictedStorageKeys.length) {
-    await chrome.storage.local.remove(evictedStorageKeys).catch(() => {});
+    await extensionApi.storage.local.remove(evictedStorageKeys).catch(() => {});
   }
 }
 
 async function clearLocationCache() {
   const storageKeys = [...cache.keys()].map(cacheStorageKey);
   cache.clear();
-  if (storageKeys.length) await chrome.storage.local.remove(storageKeys);
+  if (storageKeys.length) await extensionApi.storage.local.remove(storageKeys);
 }
 
 function hasActiveFilter() {
@@ -194,7 +200,7 @@ function normalizeLookupHealth(value) {
 async function setLookupHealth(patch) {
   lookupHealth = normalizeLookupHealth({ ...lookupHealth, ...patch });
   try {
-    await chrome.storage.local.set({ [LOOKUP_HEALTH_KEY]: lookupHealth });
+    await extensionApi.storage.local.set({ [LOOKUP_HEALTH_KEY]: lookupHealth });
   } catch (_) {
     // The in-memory value still lets the popup report this worker's state.
   }
@@ -347,7 +353,7 @@ async function loadPerAuthorCache(stored, queryRevisionChanged) {
     cache.set(storedEntry.handleKey, storedEntry.entry);
   }
   if (invalidatedCacheKeys.length) {
-    await chrome.storage.local.remove(invalidatedCacheKeys);
+    await extensionApi.storage.local.remove(invalidatedCacheKeys);
   }
 }
 
@@ -369,12 +375,12 @@ async function migrateLegacyCache(legacyCache) {
   }
   // Remove the potentially large legacy object before writing replacements so
   // an upgrade from unlimitedStorage can recover under the normal quota.
-  await chrome.storage.local.remove(LEGACY_CACHE_KEY);
-  if (Object.keys(migrated).length) await chrome.storage.local.set(migrated);
+  await extensionApi.storage.local.remove(LEGACY_CACHE_KEY);
+  if (Object.keys(migrated).length) await extensionApi.storage.local.set(migrated);
 }
 
 async function loadStoredState() {
-  const stored = await chrome.storage.local.get(null);
+  const stored = await extensionApi.storage.local.get(null);
   const previousPolicyVersion = Number(stored[RATE_STATE_KEY]?.policyVersion) || 0;
   const previousQueryRevision = Number(stored[QUERY_REVISION_KEY]) || 0;
   const queryRevisionChanged = previousQueryRevision < QUERY_REVISION;
@@ -393,7 +399,7 @@ async function loadStoredState() {
   // persisted value would otherwise disable lookups forever.
   if (rateLimitUntil > Date.now() + MAX_COOLDOWN_MS) {
     rateLimitUntil = Date.now() + MAX_COOLDOWN_MS;
-    await chrome.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
+    await extensionApi.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
   }
   // A 429 streak that old says nothing about the current windows.
   if (
@@ -412,7 +418,7 @@ async function loadStoredState() {
       consecutiveRateLimits: 0,
       lastRateLimitAt: 0,
     };
-    await chrome.storage.local.set({
+    await extensionApi.storage.local.set({
       [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil,
       [RATE_STATE_KEY]: rateState,
       [LOOKUP_HEALTH_KEY]: lookupHealth,
@@ -449,7 +455,7 @@ async function loadStoredState() {
       rateLimitUntil,
       migratedCooldownAt,
     );
-    await chrome.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
+    await extensionApi.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
   }
   // Version 3 imposed a two-hour first-429 fallback. Migrate an active legacy
   // 429 cooldown to the new header-aware exponential schedule.
@@ -467,7 +473,7 @@ async function loadStoredState() {
       rateLimitUntil,
       migratedRetryAt,
     );
-    await chrome.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
+    await extensionApi.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
   }
   if (rateState.consecutiveRateLimits && rateState.lastRateLimitAt) {
     rateLimitUntil = Math.max(
@@ -487,7 +493,7 @@ async function loadStoredState() {
   }
 
   if (queryRevisionChanged) {
-    await chrome.storage.local.set({
+    await extensionApi.storage.local.set({
       [QUERY_REVISION_KEY]: QUERY_REVISION,
       [LOOKUP_HEALTH_KEY]: lookupHealth,
     });
@@ -548,7 +554,7 @@ async function setCooldown(until) {
   // input must not disable lookups beyond the next worker start.
   rateLimitUntil = Math.max(rateLimitUntil, Math.min(until, Date.now() + MAX_COOLDOWN_MS));
   try {
-    await chrome.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
+    await extensionApi.storage.local.set({ [RATE_LIMIT_UNTIL_KEY]: rateLimitUntil });
   } catch (_) {
     // The in-memory value still enforces the cooldown for this worker.
   }
@@ -663,7 +669,7 @@ async function recordRateHeaders(headers, status, requestStartedAt) {
     lastRateLimitAt,
   };
   try {
-    await chrome.storage.local.set({ [RATE_STATE_KEY]: rateState });
+    await extensionApi.storage.local.set({ [RATE_STATE_KEY]: rateState });
   } catch (_) {
     // The in-memory rateState is authoritative for this worker lifetime; a
     // failed write must not turn a successful response into a cooldown.
@@ -844,7 +850,7 @@ async function processQueue() {
       lastRequestAt = Date.now();
 
       try {
-        await chrome.storage.local
+        await extensionApi.storage.local
           .set({ [LAST_REQUEST_AT_KEY]: lastRequestAt })
           .catch(() => {});
 
@@ -1017,7 +1023,7 @@ async function updateSettingsFromMessage(message) {
   next = normalizeSettings(next);
   settings = next;
   try {
-    await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+    await extensionApi.storage.local.set({ [SETTINGS_KEY]: next });
   } catch (error) {
     settings = previous;
     throw error;
@@ -1025,7 +1031,7 @@ async function updateSettingsFromMessage(message) {
   return { settings: next, alreadyExists };
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'XHIDE_GET_CACHED_BATCH') {
     void stateReady.then(() => {
       const entries = {};
@@ -1091,7 +1097,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void stateReady.then(() => {
       const operation = hiddenCountWrite.then(async () => {
         hiddenCount += 1;
-        await chrome.storage.local
+        await extensionApi.storage.local
           .set({ [HIDDEN_COUNT_KEY]: hiddenCount })
           .catch(() => {});
         safeRespond(sendResponse, { hiddenCount });
@@ -1104,14 +1110,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
+extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[SETTINGS_KEY]) return;
   settingsChangedWhileLoading = true;
   settings = normalizeSettings(changes[SETTINGS_KEY].newValue);
   if (!hasActiveFilter()) stopQueuedWork({ status: 'disabled' });
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
+extensionApi.tabs.onRemoved.addListener((tabId) => {
   for (const job of pending.values()) {
     job.waiters = job.waiters.filter((waiter) => waiter.tabId !== tabId);
     if (job !== currentJob && job.waiters.length === 0) {

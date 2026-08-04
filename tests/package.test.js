@@ -26,6 +26,7 @@ test('package declares GPL-3.0-only licensing', () => {
 
 test('every manifest resource exists', () => {
   assertFileExists(manifest.background.service_worker);
+  for (const filename of manifest.background.scripts || []) assertFileExists(filename);
   assertFileExists(manifest.action.default_popup);
   for (const contentScript of manifest.content_scripts) {
     for (const filename of contentScript.js || []) assertFileExists(filename);
@@ -35,6 +36,28 @@ test('every manifest resource exists', () => {
   for (const filename of Object.values(manifest.action.default_icon || {})) {
     assertFileExists(filename);
   }
+});
+
+test('manifest declares Chrome and Firefox background entry points', () => {
+  assert.equal(manifest.background.service_worker, 'background.js');
+  assert.deepEqual(
+    manifest.background.scripts,
+    ['shared.js', 'background-logic.js', 'background.js'],
+  );
+});
+
+test('Firefox metadata is ready for Manifest V3 signing and consent', () => {
+  const gecko = manifest.browser_specific_settings?.gecko;
+  assert.match(gecko?.id || '', /^[^@]+@[^@]+$/);
+  assert.equal(Number(gecko?.strict_min_version) >= 140, true);
+  assert.deepEqual(
+    [...(gecko?.data_collection_permissions?.required || [])].sort(),
+    ['authenticationInfo', 'websiteContent'],
+  );
+  assert.equal(
+    Number(manifest.browser_specific_settings?.gecko_android?.strict_min_version) >= 142,
+    true,
+  );
 });
 
 test('permissions remain narrowly scoped', () => {

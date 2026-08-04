@@ -2,6 +2,7 @@
 // each author's cached "Account based in" country. Hovered posts get first
 // priority. Only the background service is allowed to contact X's API.
 (function () {
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
   const { normalizeCountry, normalizeSettings } = XHideShared;
   const SETTINGS_KEY = 'xhide_settings';
   const CACHE_PREFIX = 'xhide_cache_entry:';
@@ -37,8 +38,8 @@
 
   async function loadState() {
     const [stored, schedule] = await Promise.all([
-      chrome.storage.local.get([SETTINGS_KEY]),
-      chrome.runtime.sendMessage({ type: 'XHIDE_GET_SCHEDULE' }).catch(() => null),
+      extensionApi.storage.local.get([SETTINGS_KEY]),
+      extensionApi.runtime.sendMessage({ type: 'XHIDE_GET_SCHEDULE' }).catch(() => null),
     ]);
     settings = normalizeSettings(stored[SETTINGS_KEY]);
     const scheduledAt = Number(schedule?.nextLookupAt);
@@ -334,7 +335,7 @@
 
     cacheHydrationInFlight = true;
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await extensionApi.runtime.sendMessage({
         type: 'XHIDE_GET_CACHED_BATCH',
         handles: unchecked,
       });
@@ -461,7 +462,7 @@
     requestAnimationFrame(() => {
       if (placeholder.isConnected) applyXPalette(placeholder, article);
     });
-    void chrome.runtime.sendMessage({ type: 'XHIDE_INCREMENT_HIDDEN' }).catch(() => {});
+    void extensionApi.runtime.sendMessage({ type: 'XHIDE_INCREMENT_HIDDEN' }).catch(() => {});
   }
 
   function applyToHandle(key) {
@@ -580,7 +581,7 @@
   async function requestCountry(handle, key) {
     inFlight.add(key);
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await extensionApi.runtime.sendMessage({
         type: 'XHIDE_LOOKUP',
         handle,
         csrfToken: getCt0() || '',
@@ -743,7 +744,7 @@
       attributeFilter: ['class', 'style'],
     });
 
-    chrome.storage.onChanged.addListener((changes, area) => {
+    extensionApi.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
 
       for (const [storageKey, change] of Object.entries(changes)) {
