@@ -78,6 +78,7 @@ for (const environment of ['chrome', 'firefox']) {
     );
 
     assert.equal(response.hiddenCount, 0);
+    assert.equal(response.mutedCount, 0);
     assert.equal(response.cacheSize, 0);
     assert.equal(response.lookupHealth.status, 'idle');
   });
@@ -107,4 +108,12 @@ test('settings updates remain serialized through the cross-browser API', async (
     JSON.parse(JSON.stringify(secondAdd.settings.blockedCountries)),
     ['Turkey'],
   );
+
+  const autoMuteUpdate = await sendMessage(listener, {
+    type: 'XHIDE_UPDATE_SETTINGS',
+    action: 'setAutoMute',
+    autoMute: true,
+  });
+  assert.equal(autoMuteUpdate.status, 'ok');
+  assert.equal(autoMuteUpdate.settings.autoMute, true);
 });

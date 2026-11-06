@@ -8,7 +8,7 @@ if (typeof importScripts === 'function') {
 // Owns all X API access for the extension. Keeping the queue and cache here
 // prevents separate x.com tabs from repeating the same account lookup.
 const extensionApi = globalThis.browser ?? globalThis.chrome;
-const { normalizeCountry, normalizeSettings } = XHideShared;
+const { isCountryBlocked, normalizeCountry, normalizeSettings } = XHideShared;
 const {
   MAX_CACHE_ENTRIES,
   isCacheEntryFresh,
@@ -28,7 +28,11 @@ const LAST_REQUEST_AT_KEY = 'xhide_last_request_at';
 const RATE_STATE_KEY = 'xhide_rate_state';
 const QUERY_REVISION_KEY = 'xhide_query_revision';
 const LOOKUP_HEALTH_KEY = 'xhide_lookup_health';
+const MUTED_HANDLES_KEY = 'xhide_muted_handles';
 const QUERY_REVISION = 3;
+
+// Safe rate pacing for user muting requests.
+const MUTE_REQUEST_INTERVAL_MS = 2000;
 
 // This endpoint is private and authenticated as the signed-in X user. Keep a
 // small global gap and adapt to the rate-limit headers X actually returns.
@@ -59,7 +63,7 @@ const MAX_SERVICE_WORKER_WAIT_MS = 1000;
 const MAX_QUEUED_JOB_AGE_MS = 45 * 1000;
 const REQUEST_TIMEOUT_MS = 12 * 1000;
 
-let settings = { enabled: true, blockedCountries: [] };
+let settings = { enabled: true, autoMute: false, blockedCountries: [] };
 // A popup settings write can land while loadState's snapshot read is still in
 // flight; the change event must win over the stale snapshot.
 let settingsChangedWhileLoading = false;
@@ -98,6 +102,11 @@ let currentAbortController = null;
 let processing = false;
 let hiddenCountWrite = Promise.resolve();
 let settingsWrite = Promise.resolve();
+
+let mutedHandles = new Set();
+let muteQueue = [];
+let muteProcessing = false;
+let lastMuteRequestAt = 0;
 
 const stateReady = loadState();
 
@@ -386,6 +395,8 @@ async function loadStoredState() {
   const queryRevisionChanged = previousQueryRevision < QUERY_REVISION;
   if (!settingsChangedWhileLoading) settings = normalizeSettings(stored[SETTINGS_KEY]);
   hiddenCount = Number(stored[HIDDEN_COUNT_KEY]) || 0;
+  const storedMuted = Array.isArray(stored[MUTED_HANDLES_KEY]) ? stored[MUTED_HANDLES_KEY] : [];
+  mutedHandles = new Set(storedMuted.map(normalizeHandle).filter(Boolean));
   rateLimitUntil = Number(stored[RATE_LIMIT_UNTIL_KEY]) || 0;
   lastRequestAt = Number(stored[LAST_REQUEST_AT_KEY]) || 0;
   rateState = normalizeRateState(stored[RATE_STATE_KEY]);
@@ -793,6 +804,76 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function sendMuteRequest(handle, csrfToken) {
+  const url = 'https://x.com/i/api/1.1/mutes/users/create.json';
+  const headers = {
+    accept: '*/*',
+    authorization: `Bearer ${BEARER}`,
+    'content-type': 'application/x-www-form-urlencoded',
+    'x-twitter-active-user': 'yes',
+    'x-twitter-auth-type': 'OAuth2Session',
+    'x-twitter-client-language': 'en',
+  };
+  if (csrfToken) headers['x-csrf-token'] = csrfToken;
+  const body = `screen_name=${encodeURIComponent(handle)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      credentials: 'include',
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (err) {
+    return { ok: false, status: null, error: err };
+  }
+}
+
+async function processMuteQueue() {
+  if (muteProcessing) return;
+  muteProcessing = true;
+  try {
+    while (muteQueue.length) {
+      if (!settings.enabled || !settings.autoMute) {
+        muteQueue = [];
+        break;
+      }
+      const item = muteQueue.shift();
+      if (!item || mutedHandles.has(item.key)) continue;
+
+      const elapsed = Date.now() - lastMuteRequestAt;
+      if (elapsed < MUTE_REQUEST_INTERVAL_MS) {
+        await delay(MUTE_REQUEST_INTERVAL_MS - elapsed);
+      }
+      if (!settings.enabled || !settings.autoMute) break;
+
+      lastMuteRequestAt = Date.now();
+      const result = await sendMuteRequest(item.handle, item.csrfToken);
+      if (result.ok || result.status === 403) {
+        mutedHandles.add(item.key);
+        await extensionApi.storage.local
+          .set({ [MUTED_HANDLES_KEY]: [...mutedHandles] })
+          .catch(() => {});
+      } else if (result.status === 429) {
+        await delay(10000);
+      }
+    }
+  } finally {
+    muteProcessing = false;
+  }
+}
+
+function enqueueMute(handle, csrfToken) {
+  if (!settings.enabled || !settings.autoMute) return;
+  const key = normalizeHandle(handle);
+  if (!key || mutedHandles.has(key)) return;
+  if (!muteQueue.some((item) => item.key === key)) {
+    muteQueue.push({ key, handle, csrfToken });
+    void processMuteQueue();
+  }
+}
+
 async function processQueue() {
   if (processing) return;
   processing = true;
@@ -878,6 +959,9 @@ async function processQueue() {
           }
           await storeCacheEntry(job.key, result.entry);
           await recordLookupSuccess(effectivePauseUntil);
+          if (settings.autoMute && isCountryBlocked(result.entry?.country, settings.blockedCountries)) {
+            enqueueMute(job.handle, job.csrfToken);
+          }
           finishJob(job, {
             status: 'ok',
             entry: result.entry,
@@ -1002,6 +1086,8 @@ async function updateSettingsFromMessage(message) {
 
   if (message.action === 'setEnabled') {
     next.enabled = Boolean(message.enabled);
+  } else if (message.action === 'setAutoMute') {
+    next.autoMute = Boolean(message.autoMute);
   } else if (message.action === 'addCountry') {
     const country = String(message.country || '').trim();
     const countryKey = normalizeCountry(country);
@@ -1077,9 +1163,20 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pruneExpiredCacheEntries();
       safeRespond(sendResponse, {
         hiddenCount,
+        mutedCount: mutedHandles.size,
         cacheSize: cache.size,
         lookupHealth: lookupHealthSnapshot(),
       });
+    });
+    return true;
+  }
+
+  if (message?.type === 'XHIDE_MUTE_HANDLE') {
+    void stateReady.then(() => {
+      if (settings.autoMute) {
+        enqueueMute(message.handle, message.csrfToken);
+      }
+      safeRespond(sendResponse, { status: 'ok' });
     });
     return true;
   }

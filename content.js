@@ -3,13 +3,13 @@
 // priority. Only the background service is allowed to contact X's API.
 (function () {
   const extensionApi = globalThis.browser ?? globalThis.chrome;
-  const { normalizeCountry, normalizeSettings } = XHideShared;
+  const { isCountryBlocked, normalizeCountry, normalizeSettings } = XHideShared;
   const SETTINGS_KEY = 'xhide_settings';
   const CACHE_PREFIX = 'xhide_cache_entry:';
   const SCAN_DEBOUNCE_MS = 300;
   const HOVER_DWELL_MS = 300;
 
-  let settings = { enabled: true, blockedCountries: [] };
+  let settings = { enabled: true, autoMute: false, blockedCountries: [] };
   let resultCache = new Map();
   let inFlight = new Set();
   let scanScheduled = false;
@@ -29,11 +29,7 @@
   }
 
   function isBlocked(country) {
-    if (!country) return false;
-    const countryKey = normalizeCountry(country);
-    return settings.blockedCountries.some(
-      (blockedCountry) => normalizeCountry(blockedCountry) === countryKey,
-    );
+    return isCountryBlocked(country, settings.blockedCountries);
   }
 
   async function loadState() {
@@ -463,6 +459,16 @@
       if (placeholder.isConnected) applyXPalette(placeholder, article);
     });
     void extensionApi.runtime.sendMessage({ type: 'XHIDE_INCREMENT_HIDDEN' }).catch(() => {});
+    if (settings.autoMute) {
+      const handle = article.dataset.xhideHandle || extractHandleFromArticle(article);
+      if (handle) {
+        void extensionApi.runtime.sendMessage({
+          type: 'XHIDE_MUTE_HANDLE',
+          handle,
+          csrfToken: getCt0(),
+        }).catch(() => {});
+      }
+    }
   }
 
   function applyToHandle(key) {

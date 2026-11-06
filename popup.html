@@ -43,6 +43,26 @@
           <span class="stat-value" id="hiddenCount">0</span>
           <span class="stat-label">Posts hidden</span>
         </article>
+        <article class="stat-card">
+          <span class="stat-icon stat-icon--muted" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          </span>
+          <span class="stat-value" id="mutedCount">0</span>
+          <span class="stat-label">Accounts muted</span>
+        </article>
+      </section>
+
+      <section class="option-card" aria-label="Mute settings">
+        <div class="option-copy">
+          <label for="autoMute"><strong>Also mute on X</strong></label>
+          <span>Mute authors whose country matches your list</span>
+        </div>
+        <label class="switch" aria-label="Also mute accounts on X">
+          <input type="checkbox" id="autoMute" />
+          <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+        </label>
       </section>
 
       <section class="countries-section" aria-labelledby="countriesTitle">

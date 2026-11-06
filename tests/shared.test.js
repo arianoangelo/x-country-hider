@@ -29,9 +29,11 @@ test('country normalization tolerates punctuation and spacing', () => {
 test('settings are validated and aliases are deduplicated', () => {
   const settings = shared.normalizeSettings({
     enabled: false,
+    autoMute: true,
     blockedCountries: [' Türkiye ', 'Turkey', '', null, 'Portugal'],
   });
   assert.equal(settings.enabled, false);
+  assert.equal(settings.autoMute, true);
   assert.deepEqual(
     JSON.parse(JSON.stringify(settings.blockedCountries)),
     ['Türkiye', 'Portugal'],
@@ -41,5 +43,12 @@ test('settings are validated and aliases are deduplicated', () => {
 test('missing settings use safe defaults', () => {
   const settings = shared.normalizeSettings(null);
   assert.equal(settings.enabled, true);
+  assert.equal(settings.autoMute, false);
   assert.deepEqual(JSON.parse(JSON.stringify(settings.blockedCountries)), []);
+});
+
+test('isCountryBlocked matches canonical and aliased countries', () => {
+  assert.equal(shared.isCountryBlocked('Turkey', ['Türkiye']), true);
+  assert.equal(shared.isCountryBlocked('Portugal', ['Spain', 'France']), false);
+  assert.equal(shared.isCountryBlocked(null, ['Spain']), false);
 });

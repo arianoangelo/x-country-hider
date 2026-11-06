@@ -68,11 +68,22 @@
 
     return {
       enabled: value?.enabled !== false,
+      autoMute: Boolean(value?.autoMute),
       blockedCountries,
     };
   }
 
+  function isCountryBlocked(country, blockedCountries) {
+    if (!country || !Array.isArray(blockedCountries)) return false;
+    const countryKey = normalizeCountry(country);
+    if (!countryKey) return false;
+    return blockedCountries.some(
+      (blockedCountry) => normalizeCountry(blockedCountry) === countryKey,
+    );
+  }
+
   global.XHideShared = Object.freeze({
+    isCountryBlocked,
     normalizeCountry,
     normalizeSettings,
   });

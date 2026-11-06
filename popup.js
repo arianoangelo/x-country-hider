@@ -14,6 +14,8 @@ const inputEl = document.getElementById('newCountry');
 const addButtonEl = document.getElementById('add');
 const formMessageEl = document.getElementById('formMessage');
 const hiddenCountEl = document.getElementById('hiddenCount');
+const mutedCountEl = document.getElementById('mutedCount');
+const autoMuteEl = document.getElementById('autoMute');
 const cacheDetailEl = document.getElementById('cacheDetail');
 const clearCacheEl = document.getElementById('clearCache');
 
@@ -230,6 +232,8 @@ async function render() {
     `${settings.blockedCountries.length} hidden ${settings.blockedCountries.length === 1 ? 'country' : 'countries'}`,
   );
   hiddenCountEl.textContent = formatCount(stats?.hiddenCount);
+  mutedCountEl.textContent = formatCount(stats?.mutedCount);
+  autoMuteEl.checked = Boolean(settings.autoMute);
   const cacheSize = Number(stats?.cacheSize) || 0;
   cacheDetailEl.textContent = cacheSize
     ? `${formatCount(cacheSize)} ${cacheSize === 1 ? 'author location' : 'author locations'} stored locally.`
@@ -244,6 +248,17 @@ enabledEl.addEventListener('change', async () => {
     await render();
   } catch (_) {
     formMessageEl.textContent = 'Could not update protection. Please try again.';
+    await render();
+  }
+});
+
+autoMuteEl.addEventListener('change', async () => {
+  const autoMute = autoMuteEl.checked;
+  try {
+    await updateSettings({ action: 'setAutoMute', autoMute });
+    await render();
+  } catch (_) {
+    formMessageEl.textContent = 'Could not update mute setting. Please try again.';
     await render();
   }
 });

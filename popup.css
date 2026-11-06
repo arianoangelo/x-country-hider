@@ -175,7 +175,7 @@ body[data-enabled="false"] .status-indicator {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-top: 12px;
 }
@@ -204,6 +204,7 @@ body[data-enabled="false"] .status-indicator {
 
 .stat-icon svg { width: 15px; height: 15px; }
 .stat-icon--hidden { background: var(--danger-soft); color: var(--danger); }
+.stat-icon--muted { background: var(--warning-soft); color: var(--warning); }
 
 .stat-value {
   font-size: 17px;
@@ -213,6 +214,37 @@ body[data-enabled="false"] .status-indicator {
 }
 
 .stat-label { margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 13px; }
+
+.option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+
+.option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.option-copy strong {
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.option-copy span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+}
 
 .countries-section {
   margin-top: 19px;

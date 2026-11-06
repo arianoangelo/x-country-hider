@@ -2,6 +2,14 @@
 
 All notable changes to X Country Hider are documented here.
 
+## 0.10.0 — 2026-11-06
+
+### Added
+
+- Optional "Also mute on X" toggle to automatically mute accounts whose country matches your blocklist.
+- Safe rate-pacing for mute requests directly inside the authenticated browser session.
+- Muted accounts counter in the popup.
+
 ## 0.9.0 — 2026-08-04
 
 ### Added
