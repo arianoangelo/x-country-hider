@@ -1,9 +1,4 @@
-const {
-  languageForRegion,
-  normalizeCountry,
-  normalizeRegionCode,
-  normalizeSettings,
-} = XHideShared;
+const { normalizeCountry, normalizeSettings } = XHideShared;
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const SETTINGS_KEY = 'xhide_settings';
 
@@ -68,26 +63,10 @@ const ISO_REGION_CODES = [
 ];
 
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
-const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
 
 async function getSettings() {
   const stored = await extensionApi.storage.local.get([SETTINGS_KEY]);
-  const settings = normalizeSettings(stored[SETTINGS_KEY]);
-  const missingCountryCodes = {};
-  for (const country of settings.blockedCountries) {
-    const countryKey = normalizeCountry(country);
-    if (settings.blockedCountryCodes[countryKey]) continue;
-    const region = ISO_REGION_CODES.find(
-      (code) => normalizeCountry(regionNames.of(code)) === countryKey,
-    );
-    if (region) missingCountryCodes[countryKey] = region;
-  }
-  if (!Object.keys(missingCountryCodes).length) return settings;
-  const response = await updateSettings({
-    action: 'setCountryCodes',
-    countryCodes: missingCountryCodes,
-  });
-  return normalizeSettings(response.settings);
+  return normalizeSettings(stored[SETTINGS_KEY]);
 }
 
 function updateSettings(update) {
@@ -135,7 +114,6 @@ function populateCountrySelect(blockedCountries = []) {
   for (const { code, name } of countryOptions) {
     const option = document.createElement('option');
     option.value = name;
-    option.dataset.regionCode = code;
     option.textContent = `${flagForCode(code)}  ${name}`;
     option.disabled = selectedValues.has(normalizeCountry(name));
     countries.appendChild(option);
@@ -146,15 +124,7 @@ function populateCountrySelect(blockedCountries = []) {
   addButtonEl.disabled = true;
 }
 
-function languageName(code) {
-  try {
-    return languageNames.of(code) || code.toUpperCase();
-  } catch (_) {
-    return code.toUpperCase();
-  }
-}
-
-function makeCountryItem(country, blockedCountryCodes) {
+function makeCountryItem(country) {
   const item = document.createElement('li');
   item.className = 'country-item';
 
@@ -170,18 +140,6 @@ function makeCountryItem(country, blockedCountryCodes) {
   name.className = 'country-item__name';
   name.textContent = country;
   name.title = country;
-
-  const copy = document.createElement('span');
-  copy.className = 'country-item__copy';
-  copy.appendChild(name);
-  const region = normalizeRegionCode(blockedCountryCodes[normalizeCountry(country)]);
-  const language = languageForRegion(region);
-  if (language) {
-    const fallback = document.createElement('span');
-    fallback.className = 'country-item__fallback';
-    fallback.textContent = `Also matches ${languageName(language)} posts`;
-    copy.appendChild(fallback);
-  }
 
   const removeButton = document.createElement('button');
   removeButton.className = 'country-item__remove';
@@ -202,7 +160,7 @@ function makeCountryItem(country, blockedCountryCodes) {
     }
   });
 
-  item.append(marker, copy, removeButton);
+  item.append(marker, name, removeButton);
   return item;
 }
 
@@ -230,29 +188,25 @@ function renderStatus(settings, stats) {
     statusCardEl.dataset.state = 'ready';
     statusTitleEl.textContent = 'Ready for a country';
     statusDetailEl.textContent = 'Add one below to start filtering your timeline.';
-  } else if (countryCount && health.status === 'auth_error') {
+  } else if (health.status === 'auth_error') {
     statusCardEl.dataset.state = 'degraded';
     statusTitleEl.textContent = 'X sign-in required';
     statusDetailEl.textContent = 'Cached matches stay hidden, but new accounts cannot be checked.';
-  } else if (countryCount && health.status === 'api_error') {
+  } else if (health.status === 'api_error') {
     statusCardEl.dataset.state = 'degraded';
     statusTitleEl.textContent = 'X lookup unavailable';
     statusDetailEl.textContent = 'Cached matches stay hidden. X may have changed its account data.';
-  } else if (countryCount && health.status === 'service_error') {
+  } else if (health.status === 'service_error') {
     statusCardEl.dataset.state = 'degraded';
     statusTitleEl.textContent = 'X is temporarily unavailable';
     statusDetailEl.textContent = 'Cached matches stay hidden while new checks wait.';
-  } else if (
-    countryCount &&
-    health.status === 'cooldown' &&
-    Number(health.retryAt) > Date.now()
-  ) {
+  } else if (health.status === 'cooldown' && Number(health.retryAt) > Date.now()) {
     statusCardEl.dataset.state = 'waiting';
     statusTitleEl.textContent = 'Waiting for X';
     statusDetailEl.textContent = `New account checks resume ${retryDescription(health.retryAt)}.`;
   } else {
     statusTitleEl.textContent = 'Protection is on';
-    statusDetailEl.textContent = `${countryCount} ${countryCount === 1 ? 'country is' : 'countries are'} being filtered with language fallback.`;
+    statusDetailEl.textContent = `${countryCount} ${countryCount === 1 ? 'country is' : 'countries are'} being filtered.`;
   }
 }
 
@@ -270,11 +224,7 @@ async function render() {
 
   renderStatus(settings, stats);
   populateCountrySelect(settings.blockedCountries);
-  listEl.replaceChildren(
-    ...settings.blockedCountries.map(
-      (country) => makeCountryItem(country, settings.blockedCountryCodes),
-    ),
-  );
+  listEl.replaceChildren(...settings.blockedCountries.map(makeCountryItem));
   emptyStateEl.hidden = settings.blockedCountries.length > 0;
   countryCountEl.textContent = String(settings.blockedCountries.length);
   countryCountEl.setAttribute(
@@ -322,13 +272,10 @@ formEl.addEventListener('submit', async (event) => {
   event.preventDefault();
   const country = inputEl.value;
   if (!country) return;
-  const countryCode = normalizeRegionCode(
-    inputEl.selectedOptions[0]?.dataset.regionCode,
-  );
 
   addButtonEl.disabled = true;
   try {
-    const response = await updateSettings({ action: 'addCountry', country, countryCode });
+    const response = await updateSettings({ action: 'addCountry', country });
     if (response.alreadyExists) {
       formMessageEl.textContent = `${country} is already on your list.`;
       inputEl.focus();

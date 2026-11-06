@@ -8,7 +8,7 @@ if (typeof importScripts === 'function') {
 // Owns all X API access for the extension. Keeping the queue and cache here
 // prevents separate x.com tabs from repeating the same account lookup.
 const extensionApi = globalThis.browser ?? globalThis.chrome;
-const { isCountryBlocked, normalizeCountry, normalizeRegionCode, normalizeSettings } = XHideShared;
+const { isCountryBlocked, normalizeCountry, normalizeSettings } = XHideShared;
 const {
   MAX_CACHE_ENTRIES,
   isCacheEntryFresh,
@@ -63,7 +63,7 @@ const MAX_SERVICE_WORKER_WAIT_MS = 1000;
 const MAX_QUEUED_JOB_AGE_MS = 45 * 1000;
 const REQUEST_TIMEOUT_MS = 12 * 1000;
 
-let settings = { enabled: true, autoMute: false, blockedCountries: [], blockedCountryCodes: {} };
+let settings = { enabled: true, autoMute: false, blockedCountries: [] };
 // A popup settings write can land while loadState's snapshot read is still in
 // flight; the change event must win over the stale snapshot.
 let settingsChangedWhileLoading = false;
@@ -173,7 +173,7 @@ async function clearLocationCache() {
   if (storageKeys.length) await extensionApi.storage.local.remove(storageKeys);
 }
 
-function hasCountryFilter() {
+function hasActiveFilter() {
   return Boolean(
     settings.enabled &&
       Array.isArray(settings.blockedCountries) &&
@@ -889,7 +889,7 @@ async function processQueue() {
 
   try {
     while (queue.length) {
-      if (!hasCountryFilter()) {
+      if (!hasActiveFilter()) {
         stopQueuedWork({ status: 'disabled' });
         break;
       }
@@ -905,7 +905,7 @@ async function processQueue() {
         break;
       }
       if (waitMs) await delay(waitMs);
-      if (!hasCountryFilter()) continue;
+      if (!hasActiveFilter()) continue;
       if (Date.now() < rateLimitUntil) continue;
 
       const job = queue.shift();
@@ -1029,7 +1029,7 @@ async function handleLookup(message, sender, sendResponse) {
     safeRespond(sendResponse, { status: 'invalid' });
     return;
   }
-  if (!hasCountryFilter()) {
+  if (!hasActiveFilter()) {
     safeRespond(sendResponse, { status: 'disabled' });
     return;
   }
@@ -1090,7 +1090,6 @@ async function updateSettingsFromMessage(message) {
   let next = {
     ...settings,
     blockedCountries: [...settings.blockedCountries],
-    blockedCountryCodes: { ...settings.blockedCountryCodes },
   };
   let alreadyExists = false;
 
@@ -1106,28 +1105,12 @@ async function updateSettingsFromMessage(message) {
       (value) => normalizeCountry(value) === countryKey,
     );
     if (!alreadyExists) next.blockedCountries.push(country);
-    const region = normalizeRegionCode(message.countryCode);
-    if (region) next.blockedCountryCodes[countryKey] = region;
   } else if (message.action === 'removeCountry') {
     const countryKey = normalizeCountry(message.country);
     if (!countryKey) throw new Error('invalid_country');
     next.blockedCountries = next.blockedCountries.filter(
       (value) => normalizeCountry(value) !== countryKey,
     );
-    delete next.blockedCountryCodes[countryKey];
-  } else if (message.action === 'setCountryCodes') {
-    const suppliedCodes = message.countryCodes;
-    if (!suppliedCodes || typeof suppliedCodes !== 'object') {
-      throw new Error('invalid_country_codes');
-    }
-    const blockedKeys = new Set(next.blockedCountries.map(normalizeCountry));
-    for (const [countryKey, value] of Object.entries(suppliedCodes)) {
-      const normalizedKey = normalizeCountry(countryKey);
-      const region = normalizeRegionCode(value);
-      if (blockedKeys.has(normalizedKey) && region) {
-        next.blockedCountryCodes[normalizedKey] = region;
-      }
-    }
   } else {
     throw new Error('invalid_settings_action');
   }
@@ -1237,7 +1220,7 @@ extensionApi.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[SETTINGS_KEY]) return;
   settingsChangedWhileLoading = true;
   settings = normalizeSettings(changes[SETTINGS_KEY].newValue);
-  if (!hasCountryFilter()) stopQueuedWork({ status: 'disabled' });
+  if (!hasActiveFilter()) stopQueuedWork({ status: 'disabled' });
 });
 
 extensionApi.tabs.onRemoved.addListener((tabId) => {

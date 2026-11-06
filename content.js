@@ -1,23 +1,15 @@
-// Watches rendered X posts, applies per-post language filters locally, and asks
-// the extension-wide background service for each author's cached "Account
-// based in" country. Hovered posts get first priority for network lookups. Only
-// the background service is allowed to contact X's API.
+// Watches rendered X posts and asks the extension-wide background service for
+// each author's cached "Account based in" country. Hovered posts get first
+// priority. Only the background service is allowed to contact X's API.
 (function () {
   const extensionApi = globalThis.browser ?? globalThis.chrome;
-  const {
-    isCountryBlocked,
-    languageForRegion,
-    normalizeCountry,
-    normalizeLanguage,
-    normalizeSettings,
-  } = XHideShared;
+  const { isCountryBlocked, normalizeCountry, normalizeSettings } = XHideShared;
   const SETTINGS_KEY = 'xhide_settings';
   const CACHE_PREFIX = 'xhide_cache_entry:';
   const SCAN_DEBOUNCE_MS = 300;
   const HOVER_DWELL_MS = 300;
 
-  let settings = { enabled: true, autoMute: false, blockedCountries: [], blockedCountryCodes: {} };
-  let languageCountryMatches = new Map();
+  let settings = { enabled: true, autoMute: false, blockedCountries: [] };
   let resultCache = new Map();
   let inFlight = new Set();
   let scanScheduled = false;
@@ -32,66 +24,12 @@
 
   const placeholders = new WeakMap();
 
-  const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
-
-  function hasCountryFilter() {
-    return Boolean(settings.enabled && settings.blockedCountries.length);
-  }
-
-  function hasLanguageFilter() {
-    return Boolean(settings.enabled && languageCountryMatches.size);
-  }
-
   function hasActiveFilter() {
-    return hasCountryFilter() || hasLanguageFilter();
+    return Boolean(settings.enabled && settings.blockedCountries.length);
   }
 
   function isBlocked(country) {
     return isCountryBlocked(country, settings.blockedCountries);
-  }
-
-  function languageLabel(language) {
-    try {
-      return languageNames.of(language) || language.toUpperCase();
-    } catch (_) {
-      return language.toUpperCase();
-    }
-  }
-
-  function refreshCountryLanguageMatches() {
-    const matches = new Map();
-    for (const country of settings.blockedCountries) {
-      const countryKey = normalizeCountry(country);
-      const language = languageForRegion(settings.blockedCountryCodes[countryKey]);
-      if (!language) continue;
-      const countries = matches.get(language) || [];
-      countries.push(country);
-      matches.set(language, countries);
-    }
-    languageCountryMatches = matches;
-  }
-
-  function extractPostLanguage(article) {
-    const textBlocks = [...article.querySelectorAll('[data-testid="tweetText"][lang]')];
-    const ownText = textBlocks.find(
-      (element) => element.closest('article[data-testid="tweet"]') === article,
-    );
-    return normalizeLanguage(ownText?.getAttribute('lang'));
-  }
-
-  function languageMatchForArticle(article) {
-    if (!hasLanguageFilter()) return null;
-    const language = extractPostLanguage(article);
-    const countries = languageCountryMatches.get(language);
-    if (!language || !countries?.length) return null;
-    return { type: 'language', language, label: languageLabel(language), countries };
-  }
-
-  function matchForArticle(article, entry) {
-    if (entry?.country && isBlocked(entry.country)) {
-      return { type: 'country', country: entry.country, label: entry.country };
-    }
-    return languageMatchForArticle(article);
   }
 
   async function loadState() {
@@ -100,7 +38,6 @@
       extensionApi.runtime.sendMessage({ type: 'XHIDE_GET_SCHEDULE' }).catch(() => null),
     ]);
     settings = normalizeSettings(stored[SETTINGS_KEY]);
-    refreshCountryLanguageMatches();
     const scheduledAt = Number(schedule?.nextLookupAt);
     if (Number.isFinite(scheduledAt) && scheduledAt > Date.now()) {
       nextLookupAt = scheduledAt;
@@ -358,7 +295,6 @@
   function revealArticle(article) {
     article.style.display = '';
     article.dataset.xhideHidden = '0';
-    delete article.dataset.xhideMatch;
     const placeholder = placeholders.get(article);
     if (placeholder) placeholder.remove();
     placeholders.delete(article);
@@ -401,10 +337,7 @@
       });
       for (const key of unchecked) cacheCheckedHandles.add(key);
       for (const [key, entry] of Object.entries(response?.entries || {})) {
-        if (entry && typeof entry === 'object') {
-          resultCache.set(key, entry);
-          applyToHandle(key);
-        }
+        if (entry && typeof entry === 'object') resultCache.set(key, entry);
       }
     } catch (_) {
       // A reload can invalidate the message channel; leave these handles
@@ -440,7 +373,7 @@
   }
 
   function showLocationBadge(article, country) {
-    if (!hasCountryFilter()) {
+    if (!hasActiveFilter()) {
       removeLocationBadge(article);
       return;
     }
@@ -462,57 +395,19 @@
     badge.querySelector('.xhide-location-badge__text').textContent = country;
   }
 
-  function requestAutoMute(article, match) {
-    // Language is a heuristic, not evidence of where an author is based, so a
-    // language-fallback match may hide the post but must never mute the account.
-    if (!settings.autoMute || match.type !== 'country') return;
-    const handle = article.dataset.xhideHandle || extractHandleFromArticle(article);
-    if (!handle) return;
-    void extensionApi.runtime.sendMessage({
-      type: 'XHIDE_MUTE_HANDLE',
-      handle,
-      csrfToken: getCt0(),
-    }).catch(() => {});
-  }
-
-  function hideArticle(article, match) {
-    const ariaLabel = match.type === 'country'
-      ? `X Country Hider hid a post from an account based in ${match.label}`
-      : `X Country Hider hid a ${match.label}-language post as a fallback for ${match.countries.join(', ')}`;
-    const explanationText = match.type === 'country' ? 'is based in' : 'posted in';
-    const badgeText = match.type === 'country'
-      ? match.label
-      : `${match.label} · ${match.countries.join('/')} fallback`;
-    const matchKey = `${match.type}:${match.label}:${match.countries?.join(',') || ''}`;
-
-    if (article.dataset.xhideHidden === '1') {
-      const existingPlaceholder = placeholders.get(article);
-      if (existingPlaceholder?.isConnected) {
-        if (article.dataset.xhideMatch === matchKey) return;
-        article.dataset.xhideMatch = matchKey;
-        existingPlaceholder.setAttribute('aria-label', ariaLabel);
-        const existingExplanation = existingPlaceholder.querySelector(
-          '.xhide-notice__explanation',
-        );
-        if (existingExplanation) existingExplanation.textContent = explanationText;
-        const existingBadge = existingPlaceholder.querySelector('.xhide-notice__match');
-        if (existingBadge) existingBadge.textContent = badgeText;
-        // A post hidden by language can later resolve to a blocked country.
-        requestAutoMute(article, match);
-        return;
-      }
-      article.style.display = '';
-      article.dataset.xhideHidden = '0';
-    }
+  function hideArticle(article, country) {
+    if (article.dataset.xhideHidden === '1') return;
     article.dataset.xhideHidden = '1';
-    article.dataset.xhideMatch = matchKey;
 
     const placeholder = document.createElement('div');
     placeholder.className = 'xhide-placeholder';
     placeholder.classList.add('xhide-notice');
     applyXPalette(placeholder, article);
     placeholder.setAttribute('role', 'status');
-    placeholder.setAttribute('aria-label', ariaLabel);
+    placeholder.setAttribute(
+      'aria-label',
+      `X Country Hider hid a post from an account based in ${country}`,
+    );
 
     const card = document.createElement('div');
     card.className = 'xhide-notice__card';
@@ -538,12 +433,11 @@
     const account = document.createElement('span');
     account.textContent = handle === 'This account' ? handle : `@${handle}`;
     const explanation = document.createElement('span');
-    explanation.className = 'xhide-notice__explanation';
-    explanation.textContent = explanationText;
-    const matchBadge = document.createElement('span');
-    matchBadge.className = 'xhide-notice__country xhide-notice__match';
-    matchBadge.textContent = badgeText;
-    detail.append(account, explanation, matchBadge);
+    explanation.textContent = 'is based in';
+    const countryBadge = document.createElement('span');
+    countryBadge.className = 'xhide-notice__country';
+    countryBadge.textContent = country;
+    detail.append(account, explanation, countryBadge);
     copy.append(title, detail);
 
     const showButton = document.createElement('button');
@@ -565,7 +459,16 @@
       if (placeholder.isConnected) applyXPalette(placeholder, article);
     });
     void extensionApi.runtime.sendMessage({ type: 'XHIDE_INCREMENT_HIDDEN' }).catch(() => {});
-    requestAutoMute(article, match);
+    if (settings.autoMute) {
+      const handle = article.dataset.xhideHandle || extractHandleFromArticle(article);
+      if (handle) {
+        void extensionApi.runtime.sendMessage({
+          type: 'XHIDE_MUTE_HANDLE',
+          handle,
+          csrfToken: getCt0(),
+        }).catch(() => {});
+      }
+    }
   }
 
   function applyToHandle(key) {
@@ -573,8 +476,7 @@
     document.querySelectorAll('article[data-testid="tweet"]').forEach((article) => {
       if (article.dataset.xhideHandleKey !== key) return;
       if (entry) showLocationBadge(article, entry.country);
-      const match = matchForArticle(article, entry);
-      if (match) hideArticle(article, match);
+      if (entry && isBlocked(entry.country)) hideArticle(article, entry.country);
       else if (article.dataset.xhideHidden === '1') revealArticle(article);
     });
   }
@@ -583,10 +485,9 @@
     document.querySelectorAll('article[data-testid="tweet"]').forEach((article) => {
       const key = article.dataset.xhideHandleKey;
       const entry = key ? resultCache.get(key) : null;
-      if (hasCountryFilter() && entry) showLocationBadge(article, entry.country);
+      if (hasActiveFilter() && entry) showLocationBadge(article, entry.country);
       else removeLocationBadge(article);
-      const match = matchForArticle(article, entry);
-      if (match) hideArticle(article, match);
+      if (entry && isBlocked(entry.country)) hideArticle(article, entry.country);
       else if (article.dataset.xhideHidden === '1') revealArticle(article);
     });
   }
@@ -599,7 +500,6 @@
   }
 
   function refreshResolvedLocations() {
-    if (!hasCountryFilter()) return;
     document.querySelectorAll('article[data-testid="tweet"]').forEach((article) => {
       const key = article.dataset.xhideHandleKey;
       const entry = key ? resultCache.get(key) : null;
@@ -727,8 +627,6 @@
 
     const key = handle.toLowerCase();
     const previousKey = article.dataset.xhideHandleKey;
-    const detectedLanguage = extractPostLanguage(article);
-    const previousLanguage = article.dataset.xhideLanguage || '';
 
     // X recycles timeline DOM nodes while scrolling. Reset extension state if
     // an existing article element now represents a different author.
@@ -738,39 +636,15 @@
       article.dataset.xhideSeen = '0';
     }
 
-    // Country decisions are per author, but language decisions are per post.
-    // X may recycle an article element for a new post from the same author.
-    if (
-      previousKey === key &&
-      previousLanguage !== detectedLanguage &&
-      article.dataset.xhideSeen === '1'
-    ) {
-      if (article.dataset.xhideHidden === '1') revealArticle(article);
-      article.dataset.xhideSeen = '0';
-    }
-
-    if (
-      article.dataset.xhideSeen === '1' &&
-      previousKey === key &&
-      previousLanguage === detectedLanguage
-    ) return null;
+    if (article.dataset.xhideSeen === '1' && previousKey === key) return null;
     article.dataset.xhideHandle = handle;
     article.dataset.xhideHandleKey = key;
-    article.dataset.xhideLanguage = detectedLanguage;
 
     const entry = resultCache.get(key);
     if (entry) {
+      article.dataset.xhideSeen = '1';
       showLocationBadge(article, entry.country);
-    }
-    const match = matchForArticle(article, entry);
-    if (match) {
-      article.dataset.xhideSeen = '1';
-      hideArticle(article, match);
-      return null;
-    }
-    if (entry || !hasCountryFilter()) {
-      article.dataset.xhideSeen = '1';
-      if (article.dataset.xhideHidden === '1') revealArticle(article);
+      if (isBlocked(entry.country)) hideArticle(article, entry.country);
       return null;
     }
 
@@ -817,15 +691,13 @@
       (article) => !article.parentElement?.closest('article[data-testid="tweet"]'),
     );
     if (hoveredArticle && !articles.includes(hoveredArticle)) hoveredArticle = null;
-    if (hasCountryFilter()) {
-      const hoveredHandle = hoveredArticle
-        ? extractHandleFromArticle(hoveredArticle)?.toLowerCase()
-        : null;
-      const renderedHandles = [hoveredHandle, ...articles.map(extractHandleFromArticle)]
-        .filter(Boolean)
-        .map((handle) => handle.toLowerCase());
-      if (!cacheHydrationInFlight) void hydrateCachedHandles(renderedHandles);
-    }
+    const hoveredHandle = hoveredArticle
+      ? extractHandleFromArticle(hoveredArticle)?.toLowerCase()
+      : null;
+    const renderedHandles = [hoveredHandle, ...articles.map(extractHandleFromArticle)]
+      .filter(Boolean)
+      .map((handle) => handle.toLowerCase());
+    if (!cacheHydrationInFlight) void hydrateCachedHandles(renderedHandles);
     const candidates = articles
       .map((article) => processArticle(article, article === hoveredArticle))
       .filter((candidate) => candidate && Number.isFinite(candidate.priority))
@@ -858,12 +730,7 @@
     scan();
 
     const observer = new MutationObserver(scheduleScan);
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ['lang'],
-      childList: true,
-      subtree: true,
-    });
+    observer.observe(document.body, { childList: true, subtree: true });
     document.addEventListener('pointerover', handleArticlePointerOver, { passive: true });
     document.addEventListener('pointerout', handleArticlePointerOut, { passive: true });
     document.addEventListener('scroll', scheduleScan, { capture: true, passive: true });
@@ -900,7 +767,6 @@
 
       if (changes[SETTINGS_KEY]) {
         settings = normalizeSettings(changes[SETTINGS_KEY].newValue);
-        refreshCountryLanguageMatches();
         reconcileVisibleArticles();
         if (hasActiveFilter()) {
           resetUncachedArticles();

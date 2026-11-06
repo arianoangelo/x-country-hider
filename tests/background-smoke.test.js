@@ -94,13 +94,11 @@ test('settings updates remain serialized through the cross-browser API', async (
       type: 'XHIDE_UPDATE_SETTINGS',
       action: 'addCountry',
       country: 'Turkey',
-      countryCode: 'TR',
     }),
     sendMessage(listener, {
       type: 'XHIDE_UPDATE_SETTINGS',
       action: 'addCountry',
       country: 'Türkiye',
-      countryCode: 'TR',
     }),
   ]);
   assert.equal(firstAdd.status, 'ok');
@@ -111,10 +109,6 @@ test('settings updates remain serialized through the cross-browser API', async (
     JSON.parse(JSON.stringify(secondAdd.settings.blockedCountries)),
     ['Turkey'],
   );
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(secondAdd.settings.blockedCountryCodes)),
-    { turkiye: 'TR' },
-  );
 
   const autoMuteUpdate = await sendMessage(listener, {
     type: 'XHIDE_UPDATE_SETTINGS',
@@ -123,27 +117,6 @@ test('settings updates remain serialized through the cross-browser API', async (
   });
   assert.equal(autoMuteUpdate.status, 'ok');
   assert.equal(autoMuteUpdate.settings.autoMute, true);
-});
-
-test('existing country filters can receive language-fallback region metadata', async () => {
-  const { runtimeListeners } = loadBackground('chrome');
-  const listener = runtimeListeners[0];
-
-  await sendMessage(listener, {
-    type: 'XHIDE_UPDATE_SETTINGS',
-    action: 'addCountry',
-    country: 'Turkey',
-  });
-  const update = await sendMessage(listener, {
-    type: 'XHIDE_UPDATE_SETTINGS',
-    action: 'setCountryCodes',
-    countryCodes: { turkiye: 'tr' },
-  });
-  assert.equal(update.status, 'ok');
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(update.settings.blockedCountryCodes)),
-    { turkiye: 'TR' },
-  );
 });
 
 async function loadWithAutoMute(status) {
