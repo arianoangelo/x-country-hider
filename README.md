@@ -6,13 +6,14 @@
 
 X Country Hider is a small Chrome and Firefox extension that hides posts on [x.com](https://x.com) according to the country or region shown in X's **About this Account** data.
 
-It runs entirely in the browser, has no analytics or developer-operated server, and only contacts X directly when it needs an account location.
+It runs entirely in the browser, has no analytics or developer-operated server, and only contacts X directly to look up an account location or, if **Also mute on X** is on, to mute a matching account.
 
 > X Country Hider is an independent project and is not affiliated with, endorsed by, or sponsored by X Corp.
 
 ## Features
 
 - Filter posts by country or by one of X's broader regional labels.
+- Optionally mute accounts on X when their location matches the list (**Also mute on X**, off by default).
 - Show the resolved account location beside a post before it is filtered.
 - Replace a hidden post with an accessible notice and a **Show post** override.
 - Share a rate-limited location cache across X tabs.
@@ -44,6 +45,10 @@ Temporary add-ons are removed when Firefox closes. A normal Firefox installation
 
 The content script observes rendered X posts. When a post is hovered or crosses the middle of the viewport, the browser's extension background process checks the local cache and, if necessary, calls X's own `AboutAccountQuery` endpoint using the active X session.
 
+**Also mute on X** is off by default. When it is on, the extension calls X's own mute endpoint using the active X session for each account whose location matches the list. Mute requests run one at a time, at least two seconds apart.
+
+Muting changes the X account itself. The extension never unmutes anyone, so these mutes remain after the option is turned off or the extension is removed, until they are undone on X.
+
 Requests are deliberately serialized and adapt to X's rate-limit headers. Existing cached matches continue to work during a cooldown or temporary X outage.
 
 Cache policy:
@@ -58,10 +63,10 @@ Cache policy:
 
 | Permission | Why it is needed |
 | --- | --- |
-| `storage` | Saves settings, cached author locations, the hidden-post count, and request pacing state locally. |
-| `https://x.com/*` | Reads rendered posts, obtains the transient X CSRF cookie, and makes direct requests to X's account-data endpoint. |
+| `storage` | Saves settings, cached author locations, the hidden-post count, the handles of accounts it has muted, and request pacing state locally. |
+| `https://x.com/*` | Reads rendered posts, obtains the transient X CSRF cookie, and makes direct requests to X's account-data endpoint and, when auto-mute is on, its mute endpoint. |
 
-The Firefox package also declares the website-content and authentication-information data categories because the account handle and current X session are sent directly back to X for the requested lookup. This does not grant access to any additional website.
+The Firefox package also declares the website-content and authentication-information data categories because the account handle and current X session are sent directly back to X for the requested lookup or mute. This does not grant access to any additional website.
 
 The extension does not request browsing-history, tabs, cookies, or access to any site other than `x.com`.
 

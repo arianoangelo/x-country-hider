@@ -107,6 +107,7 @@ let mutedHandles = new Set();
 let muteQueue = [];
 let muteProcessing = false;
 let lastMuteRequestAt = 0;
+let muteCooldownUntil = 0;
 
 const stateReady = loadState();
 
@@ -850,11 +851,16 @@ async function processMuteQueue() {
 
       lastMuteRequestAt = Date.now();
       const result = await sendMuteRequest(item.handle, item.csrfToken);
-      if (result.ok || result.status === 403) {
+      if (result.ok) {
         mutedHandles.add(item.key);
         await extensionApi.storage.local
           .set({ [MUTED_HANDLES_KEY]: [...mutedHandles] })
           .catch(() => {});
+      } else if (result.status === 401 || result.status === 403) {
+        // X refused the session, so the rest of the queue would fail the same
+        // way. Nothing is recorded: matching posts ask again after the pause.
+        muteCooldownUntil = Date.now() + AUTH_FAILURE_COOLDOWN_MS;
+        muteQueue = [];
       } else if (result.status === 429) {
         await delay(10000);
       }
@@ -866,6 +872,9 @@ async function processMuteQueue() {
 
 function enqueueMute(handle, csrfToken) {
   if (!settings.enabled || !settings.autoMute) return;
+  // Without a csrf token the request is a guaranteed auth failure. A later
+  // matching post asks again once a tab can read the ct0 cookie.
+  if (!csrfToken || Date.now() < muteCooldownUntil) return;
   const key = normalizeHandle(handle);
   if (!key || mutedHandles.has(key)) return;
   if (!muteQueue.some((item) => item.key === key)) {

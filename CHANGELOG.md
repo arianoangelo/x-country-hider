@@ -2,6 +2,16 @@
 
 All notable changes to X Country Hider are documented here.
 
+## 0.10.1 — 2026-11-06
+
+### Changed
+
+- The README and privacy policy now describe "Also mute on X", including that its mutes stay on the X account until undone there.
+
+### Fixed
+
+- "Also mute on X" no longer counts an account as muted when X refuses the request with a 401 or 403. Muting now pauses for ten minutes after such a refusal, and no mute request is sent without a CSRF token.
+
 ## 0.10.0 — 2026-11-06
 
 ### Added
