@@ -4,15 +4,17 @@
   <img src="icons/icon-128.png" width="96" height="96" alt="X Country Hider shield icon">
 </p>
 
-X Country Hider is a small Chrome and Firefox extension that hides posts on [x.com](https://x.com) according to the country or region shown in X's **About this Account** data.
+X Country Hider is a small Chrome and Firefox extension that hides posts on [x.com](https://x.com) according to the country or region shown in X's **About this Account** data, with an automatic country-linked language fallback.
 
-It runs entirely in the browser, has no analytics or developer-operated server, and only contacts X directly when it needs an account location.
+It runs entirely in the browser, has no analytics or developer-operated server, and only contacts X directly to look up an account location or, if **Also mute on X** is on, to mute a matching account.
 
 > X Country Hider is an independent project and is not affiliated with, endorsed by, or sponsored by X Corp.
 
 ## Features
 
 - Filter posts by country or by one of X's broader regional labels.
+- Pair each selected country with its most likely language as a fallback when account location is not a useful signal.
+- Optionally mute accounts on X when their location matches the list (**Also mute on X**, off by default).
 - Show the resolved account location beside a post before it is filtered.
 - Replace a hidden post with an accessible notice and a **Show post** override.
 - Share a rate-limited location cache across X tabs.
@@ -44,6 +46,12 @@ Temporary add-ons are removed when Firefox closes. A normal Firefox installation
 
 The content script observes rendered X posts. When a post is hovered or crosses the middle of the viewport, the browser's extension background process checks the local cache and, if necessary, calls X's own `AboutAccountQuery` endpoint using the active X session.
 
+For normal country selections, the extension derives the country's most likely language from the browser's locale data and compares it with the BCP 47 language marker X attaches to rendered post text. For example, selecting Türkiye also matches Turkish posts. The fallback is evaluated locally and is reported as a language match rather than an inferred country. Country matches take priority when a cached account location is available. X's broader regional buckets do not receive a language fallback.
+
+**Also mute on X** is off by default. When it is on, the extension calls X's own mute endpoint using the active X session for each account whose location matches the list. A language match hides the post but never mutes the account. Mute requests run one at a time, at least two seconds apart.
+
+Muting changes the X account itself. The extension never unmutes anyone, so these mutes remain after the option is turned off or the extension is removed, until they are undone on X.
+
 Requests are deliberately serialized and adapt to X's rate-limit headers. Existing cached matches continue to work during a cooldown or temporary X outage.
 
 Cache policy:
@@ -58,10 +66,10 @@ Cache policy:
 
 | Permission | Why it is needed |
 | --- | --- |
-| `storage` | Saves settings, cached author locations, the hidden-post count, and request pacing state locally. |
-| `https://x.com/*` | Reads rendered posts, obtains the transient X CSRF cookie, and makes direct requests to X's account-data endpoint. |
+| `storage` | Saves settings, cached author locations, the hidden-post count, the handles of accounts it has muted, and request pacing state locally. |
+| `https://x.com/*` | Reads rendered posts, obtains the transient X CSRF cookie, and makes direct requests to X's account-data endpoint and, when auto-mute is on, its mute endpoint. |
 
-The Firefox package also declares the website-content and authentication-information data categories because the account handle and current X session are sent directly back to X for the requested lookup. This does not grant access to any additional website.
+The Firefox package also declares the website-content and authentication-information data categories because the account handle and current X session are sent directly back to X for the requested lookup or mute. This does not grant access to any additional website.
 
 The extension does not request browsing-history, tabs, cookies, or access to any site other than `x.com`.
 
@@ -71,6 +79,8 @@ See [PRIVACY.md](PRIVACY.md) for the complete data-handling description.
 
 Due to X's rate limits, the extension may take longer to hide some accounts or temporarily fail to hide them.
 
+Detected language is a heuristic supplied by X, not evidence of an author's country or identity. Very short, mixed-language, or quoted posts may occasionally be classified unexpectedly.
+
 ## Development
 
 There is no build step and no runtime dependency installation.
@@ -79,7 +89,7 @@ There is no build step and no runtime dependency installation.
 npm run verify
 ```
 
-This checks JavaScript syntax, parses the manifest, and runs the unit tests for cache expiry, API-response validation, settings normalization, and country aliases.
+This checks JavaScript syntax, parses the manifest, and runs the unit tests for cache expiry, API-response validation, settings normalization, country aliases, and language tags.
 
 When changing behavior, update the version in both `manifest.json` and `package.json`, add an entry to [CHANGELOG.md](CHANGELOG.md), and manually test against a signed-in X account in both Chrome and Firefox.
 

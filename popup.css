@@ -397,12 +397,25 @@ body[data-enabled="false"] .status-indicator {
 
 .country-item__marker svg { width: 13px; height: 13px; }
 
+.country-item__copy { min-width: 0; flex: 1; }
+
 .country-item__name {
+  display: block;
   min-width: 0;
-  flex: 1;
   overflow: hidden;
   font-size: 12px;
   font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.country-item__fallback {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "X Country Hider",
-  "version": "0.10.0",
-  "description": "Hides posts on x.com based on the country or region shown in X's About this Account data.",
+  "version": "0.11.0",
+  "description": "Hides posts on x.com by X account location with a country-linked language fallback.",
   "permissions": ["storage"],
   "host_permissions": ["https://x.com/*"],
   "content_scripts": [

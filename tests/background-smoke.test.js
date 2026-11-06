@@ -32,7 +32,7 @@ function runScript(context, filename) {
   });
 }
 
-function loadBackground(environment) {
+function loadBackground(environment, overrides = {}) {
   const storage = {};
   const runtimeListeners = [];
   const extensionApi = createExtensionApi(storage, runtimeListeners);
@@ -42,6 +42,7 @@ function loadBackground(environment) {
     console,
     fetch: async () => { throw new Error('Unexpected network request'); },
     setTimeout,
+    ...overrides,
   };
   globals[environment === 'firefox' ? 'browser' : 'chrome'] = extensionApi;
   const context = vm.createContext(globals);
@@ -57,7 +58,7 @@ function loadBackground(environment) {
     runScript(context, 'background.js');
   }
 
-  return { runtimeListeners };
+  return { runtimeListeners, storage };
 }
 
 function sendMessage(listener, message) {
@@ -93,11 +94,13 @@ test('settings updates remain serialized through the cross-browser API', async (
       type: 'XHIDE_UPDATE_SETTINGS',
       action: 'addCountry',
       country: 'Turkey',
+      countryCode: 'TR',
     }),
     sendMessage(listener, {
       type: 'XHIDE_UPDATE_SETTINGS',
       action: 'addCountry',
       country: 'Türkiye',
+      countryCode: 'TR',
     }),
   ]);
   assert.equal(firstAdd.status, 'ok');
@@ -108,6 +111,10 @@ test('settings updates remain serialized through the cross-browser API', async (
     JSON.parse(JSON.stringify(secondAdd.settings.blockedCountries)),
     ['Turkey'],
   );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(secondAdd.settings.blockedCountryCodes)),
+    { turkiye: 'TR' },
+  );
 
   const autoMuteUpdate = await sendMessage(listener, {
     type: 'XHIDE_UPDATE_SETTINGS',
@@ -116,4 +123,92 @@ test('settings updates remain serialized through the cross-browser API', async (
   });
   assert.equal(autoMuteUpdate.status, 'ok');
   assert.equal(autoMuteUpdate.settings.autoMute, true);
+});
+
+test('existing country filters can receive language-fallback region metadata', async () => {
+  const { runtimeListeners } = loadBackground('chrome');
+  const listener = runtimeListeners[0];
+
+  await sendMessage(listener, {
+    type: 'XHIDE_UPDATE_SETTINGS',
+    action: 'addCountry',
+    country: 'Turkey',
+  });
+  const update = await sendMessage(listener, {
+    type: 'XHIDE_UPDATE_SETTINGS',
+    action: 'setCountryCodes',
+    countryCodes: { turkiye: 'tr' },
+  });
+  assert.equal(update.status, 'ok');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(update.settings.blockedCountryCodes)),
+    { turkiye: 'TR' },
+  );
+});
+
+async function loadWithAutoMute(status) {
+  const calls = [];
+  const { runtimeListeners, storage } = loadBackground('chrome', {
+    fetch: async (url) => {
+      calls.push(url);
+      return { ok: status >= 200 && status < 300, status };
+    },
+    // Skip the two-second mute pacing, so a missing pause would show up as an
+    // extra request instead of hiding behind the delay.
+    setTimeout: (callback) => setTimeout(callback, 0),
+  });
+  const listener = runtimeListeners[0];
+  await sendMessage(listener, {
+    type: 'XHIDE_UPDATE_SETTINGS',
+    action: 'setAutoMute',
+    autoMute: true,
+  });
+
+  return {
+    calls,
+    storage,
+    mutedCount: async () =>
+      (await sendMessage(listener, { type: 'XHIDE_GET_STATS' })).mutedCount,
+    requestMute: async (handle, csrfToken = 'token') => {
+      await sendMessage(listener, { type: 'XHIDE_MUTE_HANDLE', handle, csrfToken });
+      // The queue keeps running after the reply.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    },
+  };
+}
+
+test('auto-mute records accounts that X accepts and keeps going', async () => {
+  const { calls, mutedCount, requestMute, storage } = await loadWithAutoMute(200);
+
+  await requestMute('someone');
+  await requestMute('another');
+
+  assert.equal(calls.length, 2);
+  assert.equal(await mutedCount(), 2);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(storage.xhide_muted_handles)),
+    ['someone', 'another'],
+  );
+});
+
+for (const status of [401, 403]) {
+  test(`auto-mute does not record a ${status} and pauses further requests`, async () => {
+    const { calls, mutedCount, requestMute, storage } = await loadWithAutoMute(status);
+
+    await requestMute('someone');
+    await requestMute('another');
+
+    assert.equal(calls.length, 1);
+    assert.equal(await mutedCount(), 0);
+    assert.equal(storage.xhide_muted_handles, undefined);
+  });
+}
+
+test('auto-mute sends nothing without a csrf token', async () => {
+  const { calls, mutedCount, requestMute } = await loadWithAutoMute(200);
+
+  await requestMute('someone', null);
+
+  assert.equal(calls.length, 0);
+  assert.equal(await mutedCount(), 0);
 });

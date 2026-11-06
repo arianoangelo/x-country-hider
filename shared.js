@@ -52,6 +52,32 @@
     return COUNTRY_ALIASES.get(label) || label;
   }
 
+  function normalizeLanguage(value) {
+    const code = String(value || '')
+      .trim()
+      .replace(/_/g, '-')
+      .toLocaleLowerCase('en')
+      .split('-')[0];
+    const aliases = { in: 'id', iw: 'he', tl: 'fil' };
+    const normalized = aliases[code] || code;
+    return /^[a-z]{2,3}$/.test(normalized) ? normalized : '';
+  }
+
+  function normalizeRegionCode(value) {
+    const code = String(value || '').trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(code) ? code : '';
+  }
+
+  function languageForRegion(value) {
+    const region = normalizeRegionCode(value);
+    if (!region) return '';
+    try {
+      return normalizeLanguage(new Intl.Locale(`und-${region}`).maximize().language);
+    } catch (_) {
+      return '';
+    }
+  }
+
   function normalizeSettings(value) {
     const countries = Array.isArray(value?.blockedCountries)
       ? value.blockedCountries
@@ -65,11 +91,19 @@
       seen.add(key);
       return true;
     });
+    const storedCountryCodes = value?.blockedCountryCodes;
+    const blockedCountryCodeEntries = blockedCountries.flatMap((country) => {
+      if (!storedCountryCodes || typeof storedCountryCodes !== 'object') return [];
+      const countryKey = normalizeCountry(country);
+      const region = normalizeRegionCode(storedCountryCodes[countryKey]);
+      return region ? [[countryKey, region]] : [];
+    });
 
     return {
       enabled: value?.enabled !== false,
       autoMute: Boolean(value?.autoMute),
       blockedCountries,
+      blockedCountryCodes: Object.fromEntries(blockedCountryCodeEntries),
     };
   }
 
@@ -84,7 +118,10 @@
 
   global.XHideShared = Object.freeze({
     isCountryBlocked,
+    languageForRegion,
     normalizeCountry,
+    normalizeLanguage,
+    normalizeRegionCode,
     normalizeSettings,
   });
 })(globalThis);

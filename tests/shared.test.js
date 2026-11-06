@@ -31,6 +31,7 @@ test('settings are validated and aliases are deduplicated', () => {
     enabled: false,
     autoMute: true,
     blockedCountries: [' Türkiye ', 'Turkey', '', null, 'Portugal'],
+    blockedCountryCodes: { turkiye: 'tr', portugal: 'PT', france: 'FR' },
   });
   assert.equal(settings.enabled, false);
   assert.equal(settings.autoMute, true);
@@ -38,6 +39,23 @@ test('settings are validated and aliases are deduplicated', () => {
     JSON.parse(JSON.stringify(settings.blockedCountries)),
     ['Türkiye', 'Portugal'],
   );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(settings.blockedCountryCodes)),
+    { turkiye: 'TR', portugal: 'PT' },
+  );
+});
+
+test('language normalization accepts BCP 47 tags and legacy aliases', () => {
+  assert.equal(shared.normalizeLanguage('tr-TR'), 'tr');
+  assert.equal(shared.normalizeLanguage('pt_BR'), 'pt');
+  assert.equal(shared.normalizeLanguage('iw'), 'he');
+  assert.equal(shared.normalizeLanguage('english'), '');
+});
+
+test('a region resolves to its most likely language', () => {
+  assert.equal(shared.languageForRegion('TR'), 'tr');
+  assert.equal(shared.languageForRegion('PT'), 'pt');
+  assert.equal(shared.languageForRegion(''), '');
 });
 
 test('missing settings use safe defaults', () => {
@@ -45,6 +63,7 @@ test('missing settings use safe defaults', () => {
   assert.equal(settings.enabled, true);
   assert.equal(settings.autoMute, false);
   assert.deepEqual(JSON.parse(JSON.stringify(settings.blockedCountries)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(settings.blockedCountryCodes)), {});
 });
 
 test('isCountryBlocked matches canonical and aliased countries', () => {
